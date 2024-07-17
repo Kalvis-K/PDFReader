@@ -1,5 +1,6 @@
 package com.example.PDFReader;
 
+import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpHeaders;
@@ -15,13 +16,10 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/upload")
+@RequiredArgsConstructor
 public class FileUploadController {
 
     private final PDFService pdfService;
-
-    public FileUploadController(PDFService pdfService) {
-        this.pdfService = pdfService;
-    }
 
     @PostMapping
     public ResponseEntity<byte[]> handleFileUpload(@RequestParam("file") MultipartFile file) {
@@ -45,14 +43,16 @@ public class FileUploadController {
             headerRow.createCell(1).setCellValue("Quantity");
             headerRow.createCell(2).setCellValue("Price");
 
-            @SuppressWarnings("unchecked")
-            List<Map<String, String>> itemDetails = (List<Map<String, String>>) extractedInfo.get("Item Details");
+            List<String> items = (List<String>) extractedInfo.get("Items");
+            List<String> quantities = (List<String>) extractedInfo.get("Quantities");
+            List<String> prices = (List<String>) extractedInfo.get("Prices");
+
             int rowNum = 4;
-            for (Map<String, String> itemDetail : itemDetails) {
+            for (int i = 0; i < items.size(); i++) {
                 Row row = sheet.createRow(rowNum++);
-                row.createCell(0).setCellValue(itemDetail.get("Item"));
-                row.createCell(1).setCellValue(itemDetail.get("Quantity"));
-                row.createCell(2).setCellValue(itemDetail.get("Price"));
+                row.createCell(0).setCellValue(items.get(i));
+                row.createCell(1).setCellValue(quantities.get(i));
+                row.createCell(2).setCellValue(prices.get(i));
             }
 
             workbook.write(byteArrayOutputStream);

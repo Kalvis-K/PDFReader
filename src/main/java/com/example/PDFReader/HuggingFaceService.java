@@ -1,11 +1,11 @@
 package com.example.PDFReader;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.util.Collections;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,36 +14,43 @@ import java.util.Map;
 public class HuggingFaceService {
 
     private final WebClient webClient;
+    private final ObjectMapper objectMapper;
 
-    public HuggingFaceService(@Value("${huggingface.api.key}") String apiKey) {
-        this.webClient = WebClient.builder()
-                .baseUrl("https://api-inference.huggingface.co/models")
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .build();
+    public HuggingFaceService(WebClient webClient, ObjectMapper objectMapper) {
+        this.webClient = webClient;
+        this.objectMapper = objectMapper;
     }
 
-    public Mono<String> extractInvoiceData(String model, String invoiceText) {
+    public Mono<Map<String, List<String>>> extractInvoiceDetails(String invoiceText) {
         return webClient.post()
-                .uri("/{model}", model)
+                .uri("/dbmdz/bert-large-cased-finetuned-conll03-english")
                 .bodyValue(new HuggingFaceRequest(invoiceText))
                 .retrieve()
-                .bodyToMono(String.class);
+                .bodyToMono(String.class)
+                .map(this::processResponse);
     }
 
-    private Map<String, List<String>> processHuggingFaceResponse(HuggingFaceResponse response) {
-        // Example processing logic based on model output
-        Map<String, List<String>> extractedInfo = new HashMap<>();
+    private Map<String, List<String>> processResponse(String response) {
+        try {
+            HuggingFaceResponse huggingFaceResponse = objectMapper.readValue(response, HuggingFaceResponse.class);
+            Map<String, List<String>> entities = huggingFaceResponse.getEntities();
+            Map<String, List<String>> extractedInfo = new HashMap<>();
 
-        // Assuming the response provides named entity recognition (NER) results
-        List<String> items = response.getEntitiesOfType("ITEM");
-        List<String> quantities = response.getEntitiesOfType("QUANTITY");
-        List<String> prices = response.getEntitiesOfType("PRICE");
+            if (entities.containsKey("Kods")) {
+                extractedInfo.put("Items", entities.get("Kods"));
+            }
+            if (entities.containsKey("Daudz.*")) {
+                extractedInfo.put("Quantities", entities.get("Daudz.*"));
+            }
+            if (entities.containsKey("Cena")) {
+                extractedInfo.put("Prices", entities.get("Cena"));
+            }
 
-        extractedInfo.put("Items", items);
-        extractedInfo.put("Quantities", quantities);
-        extractedInfo.put("Prices", prices);
-
-        return extractedInfo;
+            return extractedInfo;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return new HashMap<>();
+        }
     }
 
     private static class HuggingFaceRequest {
@@ -83,8 +90,8 @@ public class HuggingFaceService {
             return entities;
         }
 
-        public List<String> getEntitiesOfType(String type) {
-            return entities.getOrDefault(type, Collections.emptyList());
+        public void setEntities(Map<String, List<String>> entities) {
+            this.entities = entities;
         }
     }
 }

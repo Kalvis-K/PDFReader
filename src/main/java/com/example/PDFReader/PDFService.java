@@ -1,9 +1,11 @@
 package com.example.PDFReader;
 
+import lombok.RequiredArgsConstructor;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.*;
@@ -11,7 +13,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
+@RequiredArgsConstructor
 public class PDFService {
+
+    private final HuggingFaceService huggingFaceService;
 
     public Map<String, Object> extractInfoFromPDF(MultipartFile file) throws IOException {
         PDDocument document = PDDocument.load(file.getInputStream());
@@ -31,8 +36,10 @@ public class PDFService {
         extractedInfo.put("Invoice Date", extractInvoiceDate(text));
         extractedInfo.put("Total Amount", extractTotalAmount(text));
 
-        List<Map<String, String>> itemDetails = extractItems(text);
-        extractedInfo.put("Item Details", itemDetails);
+        Mono<Map<String, List<String>>> invoiceDetailsMono = huggingFaceService.extractInvoiceDetails(text);
+        Map<String, List<String>> invoiceDetails = invoiceDetailsMono.block();
+
+        extractedInfo.putAll(invoiceDetails);
 
         return extractedInfo;
     }
@@ -99,23 +106,6 @@ public class PDFService {
             return matcher.group(1);
         }
         return "Not found";
-    }
-
-    private List<Map<String, String>> extractItems(String text) {
-        List<Map<String, String>> items = new ArrayList<>();
-
-        Pattern pattern = Pattern.compile("^([^\\s]+).*?\\n(\\d+)\\s+([\\d,.]+)", Pattern.DOTALL | Pattern.MULTILINE);
-        Matcher matcher = pattern.matcher(text);
-
-        while (matcher.find()) {
-            Map<String, String> item = new HashMap<>();
-            item.put("Item", matcher.group(1).trim());
-            item.put("Quantity", matcher.group(2));
-            item.put("Price", matcher.group(3));
-
-            items.add(item);
-        }
-        return items;
     }
 }
 
